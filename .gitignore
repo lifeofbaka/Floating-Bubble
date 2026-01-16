@@ -1,0 +1,27 @@
+# --- DEPLOYMENT/SECRET FILES ---
+.env
+*.log
+secret.json
+
+# --- NODE / JAVASCRIPT ---
+node_modules/
+dist/
+build/
+.npm
+.eslintcache
+
+# --- PYTHON ---
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.python-version
+
+# --- VS CODE ---
+.vscode/
+
+# --- OPERATING SYSTEM ---
+.DS_Store
+Thumbs.db

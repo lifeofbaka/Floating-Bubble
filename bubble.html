@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+  <style>
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    #container {
+      width: 100%;
+      height: 100%;
+      transition: width 200ms ease, height 200ms ease;
+      position: relative;
+      overflow: visible;
+    }
+
+    #container.expanded {
+      width: 320px;
+      height: 420px;
+    }
+
+    #bubble {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      transition: border-radius 200ms ease;
+      background-color: #FAFAFA;
+      
+    
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FAFAFA;
+      font-weight: bold;
+      user-select: none;
+      transform-origin: bottom right;
+      -webkit-app-region: no-drag; /* ensures clicks work */
+      position: relative;
+      overflow: visible;
+    }
+
+    #container.expanded #bubble {
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      align-items: flex-start;
+      justify-content: flex-start;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* content area inside expanded bubble */
+    #content {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 10px;
+      bottom: 10px;
+      background: #FAFAFA;
+      border-style: solid;
+      /* box-shadow: 0 4px 12px rgba(0,0,0,0.12); */
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 140ms ease 40ms;
+      overflow: auto;
+      -webkit-app-region: no-drag;
+    }
+
+    #container.expanded #content {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Close button that overlaps top-right of content */
+    #closeBtn {
+      position: absolute;
+      top: 0px;
+      right: 1px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: #FAFAFA; /* same color as bubble */
+      color: #0085fe;
+      text-decoration: solid;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      
+      z-index: 20;
+      -webkit-app-region: no-drag;
+    }
+
+    /* show close only after content expansion finishes (controlled by JS) */
+    #container.show-close #closeBtn {
+      display: inline-flex;
+    }
+
+    /* Keep messages and input hidden until expansion completes */
+    #content .messages-wrapper,
+    #content .input-row {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      visibility: hidden;
+      transition: opacity 160ms ease 40ms, transform 160ms ease 40ms;
+    }
+
+    #container.show-close #content .messages-wrapper,
+    #container.show-close #content .input-row {
+      opacity: 1;
+      pointer-events: auto;
+      transform: none;
+      visibility: visible;
+    }
+
+    /* Extra safety: ensure controls are fully hidden when not showing close */
+    #container:not(.show-close) #content .messages-wrapper,
+    #container:not(.show-close) #content .input-row {
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    /* Chat layout inside content: messages live in a wrapper positioned
+       below the close button; input row is pinned to the bottom */
+    #content .chat {
+      position: relative;
+      height: 100%;
+    }
+
+    #content .messages-wrapper {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 30px; /* below the close button */
+      bottom: 70px; /* leave room for input row */
+      overflow: auto;
+      box-sizing: border-box;
+      padding-right: 12px;
+      
+    }
+   
+    /* modern rounded scrollbar for Chromium (Electron) */
+    .messages-wrapper {
+      scrollbar-width: thin; /* Firefox */
+      scrollbar-color: rgba(0,0,0,0.14) transparent;
+    }
+
+    /* WebKit */
+    .messages-wrapper::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    .messages-wrapper::-webkit-scrollbar-track {
+      background: transparent;
+      border-radius: 999px;
+    }
+
+    .messages-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.12);
+      border-radius: 999px;
+      border: 2px solid transparent; /* creates inner padding */
+      background-clip: padding-box;
+      transition: background-color 140ms ease, transform 140ms ease;
+    }
+
+    /* stronger on hover */
+    .messages-wrapper:hover::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.20);
+      transform: translateX(0);
+    }
+
+    /* optional: slightly narrower on normal state */
+    .messages-wrapper::-webkit-scrollbar-thumb:active {
+      background: rgba(0,0,0,0.26);
+    }
+
+    #content .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px 0;
+      overflow: auto;
+    }
+
+    #content .input-row {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-sizing: border-box;
+      background: transparent;
+    }
+
+    #content .input-row button {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(0,0,0,0.06);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-app-region: no-drag;
+    }
+
+    /* Make the send button circular. Targets both id and optional class 'sendBtn' */
+    #content .input-row button#sendBtn,
+    #content .input-row button.sendBtn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      color: #0085fe;
+      align-items: center;
+      justify-content: center;
+      box-shadow: none;
+      line-height: 1;
+      rotate: -90deg; /* rotate arrow to point right */
+    }
+
+    #content .input-row textarea {
+      flex: 1 1 auto;
+      min-height: 40px;
+      max-height: 120px;
+      resize: none;
+      border-radius: 10px;
+      border: 1px solid #FAFAFA;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 13px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* simple message bubbles */
+    .msg {
+      display: block;
+      padding: 8px 12px;
+      border-radius: 12px;
+      max-width: 80%;
+      background: #c7c5c5;
+      font-size: 13px;
+      word-break: break-word;
+      white-space: pre-wrap;
+      align-self: flex-start;
+    }
+
+    .msg.outgoing {
+      align-self: flex-end;
+      background: #0078D7;
+      color: white;
+    }
+
+    /* Typing animation: three bouncing dots */
+    .typing {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .typing .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.18);
+      opacity: 0.4;
+      transform: translateY(0);
+      animation: typing-dot 900ms infinite ease-in-out;
+    }
+
+    .typing .dot:nth-child(1) { animation-delay: 0ms; }
+    .typing .dot:nth-child(2) { animation-delay: 150ms; }
+    .typing .dot:nth-child(3) { animation-delay: 300ms; }
+
+    @keyframes typing-dot {
+      0% { opacity: 0.35; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-6px); }
+      100% { opacity: 0.35; transform: translateY(0); }
+    }
+
+    /* Make the typing placeholder container transparent so the grey
+       message-bubble background doesn't show behind the animated dots */
+    #__typing {
+      background: transparent;
+      padding: 0;
+      align-self: flex-start;
+      box-shadow: none;
+    }
+
+    #__typing .typing {
+      padding: 6px 10px; /* provide spacing for the dots */
+      background: transparent;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    #icon {
+      transition: opacity 120ms ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* Make any image inside the icon non-selectable/non-draggable and center it */
+    #icon img {
+      max-width: 64%;
+      max-height: 64%;
+      width: auto;
+      height: auto;
+      display: block;
+      -webkit-user-drag: none;
+    }
+
+    /* Ensure the icon image is centered when collapsed */
+    #container:not(.expanded) #bubble {
+      align-items: center;
+      justify-content: center;
+    }
+
+    #container:not(.expanded) #icon img {
+      max-width: 70%;
+      max-height: 70%;
+      display: block;
+      visibility: visible;
+    }
+
+    /* Hide immediately when expanding, but animate when showing again */
+    #container.expanded #icon {
+      opacity: 0;
+      transition: opacity 0ms ease;
+    }
+
+
+    #sendBtn{
+      width: 40px;
+      height: 40px;
+      border-radius: 80%;
+    }
+
+
+  </style>
+
+
+</head>
+<body>
+  <div id="container">
+    <div id="bubble">
+      <div id="icon"><img src="icon.png"></div>
+      <button id="closeBtn" title="Close">✕</button>
+      <div id="content">
+        <div class="chat">
+          <div class="messages-wrapper">
+            <div class="messages" id="messages"></div>
+          </div>
+          <div class="input-row">
+            <button id="attachBtn" title="Attach">+</button>
+            <textarea id="chatInput" placeholder="Type a message..."></textarea>
+            <button class="sendBtn" id="sendBtn" title="Send">➜</button>
+            <input id="fileInput" type="file" style="display:none" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+ <script>
+  const { ipcRenderer } = require('electron');
+  const bubble = document.getElementById('bubble');
+  const container = document.getElementById('container');
+
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let dragDistance = 0;
+  let moved = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  let expanded = false;
+
+  bubble.addEventListener('mousedown', (e) => {
+    // If user started the pointer inside the content area or an interactive
+    // control, don't start window dragging (so text selection works).
+    const interactive = e.target.closest && e.target.closest('#content, textarea, input, button, .messages, #closeBtn');
+    if (interactive) return;
+
+    isDragging = true;
+    dragDistance = 0;
+    moved = false;
+
+    startX = e.screenX;
+    startY = e.screenY;
+
+    offsetX = e.offsetX;
+    offsetY = e.offsetY;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    dragDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
+    if (dragDistance > 5) moved = true;
+
+    const x = e.screenX - offsetX;
+    const y = e.screenY - offsetY;
+
+    ipcRenderer.send('move-bubble', { x, y });
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  bubble.addEventListener('click', () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+
+
+    // Ignore click if we detected a drag
+    if (moved) {
+      moved = false;
+      return;
+    }
+
+    // When already expanded, clicking the bubble should not collapse it.
+    // Collapse is handled by the close button only.
+    if (expanded) return;
+
+    expanded = true;
+    container.classList.add('expanded');
+    // ensure close button appears only after expansion animation completes
+    const content = document.getElementById('content');
+    if (content) {
+      const onEnd = (ev) => {
+        if (ev.propertyName === 'opacity') container.classList.add('show-close');
+      };
+      content.addEventListener('transitionend', onEnd, { once: true });
+      // fallback in case transitionend doesn't fire
+      setTimeout(() => container.classList.add('show-close'), 300);
+    } else {
+      container.classList.add('show-close');
+    }
+
+    ipcRenderer.send('log', 'Bubble clicked (expand)!');
+    ipcRenderer.send('resize-bubble', true);
+
+  });
+  
+  // Chat input handling
+  const messages = document.getElementById('messages');
+  const messagesWrapper = document.querySelector('.messages-wrapper');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const attachBtn = document.getElementById('attachBtn');
+  const fileInput = document.getElementById('fileInput');
+
+
+  // URL of local test server (FastAPI /echo)
+  const API_ECHO = 'http://127.0.0.1:5000/echo';
+
+  // Tracks an in-flight request to prevent duplicate sends
+  let pendingRequest = false;
+  // milliseconds to wait before sending request (adjustable)
+  const SEND_DELAY_MS = 1000;
+
+  function appendMessage(text, outgoing = false) {
+    const d = document.createElement('div');
+    d.className = 'msg' + (outgoing ? ' outgoing' : '');
+    d.textContent = text;
+    messages.appendChild(d);
+    // Scroll the wrapper so the newest message is visible
+    if (messagesWrapper) {
+      messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
+    } else {
+      messages.scrollTop = messages.scrollHeight;
+    }
+  }
+
+  function showTyping(show) {
+    if (!messagesWrapper) return;
+    const id = '__typing';
+    if (show) {
+      if (!document.getElementById(id)) {
+        const t = document.createElement('div');
+        t.id = id;
+        t.className = 'msg';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'typing';
+        for (let i = 0; i < 3; i++) {
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          wrapper.appendChild(dot);
+        }
+
+        t.appendChild(wrapper);
+        messagesWrapper.appendChild(t);
+        messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
+      }
+    } else {
+      const t = document.getElementById(id);
+      if (t) t.remove();
+    }
+}
+
+
+async function sendMessage() {
+  if (pendingRequest) return;
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  // show user's outgoing message
+  appendMessage(text, true);
+  chatInput.value = '';
+  chatInput.focus();
+
+  pendingRequest = true;
+  sendBtn.disabled = true;
+  chatInput.disabled = true;
+  // Don't show typing immediately; wait until after the optional SEND_DELAY_MS
+
+  try {
+    // optional small delay to simulate typing / debounce before sending
+    if (SEND_DELAY_MS && SEND_DELAY_MS > 0) {
+      await new Promise((res) => setTimeout(res, SEND_DELAY_MS));
+    }
+
+    // show typing indicator only after the initial delay so it doesn't appear instantly
+    showTyping(true);
+    const res = await fetch(API_ECHO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || res.statusText);
+    }
+
+    const data = await res.json();
+    // append server reply (adjust key if your server returns different field)
+    appendMessage(data.echo ?? `Reply: ${data.original ?? ''}`, false);
+  } catch (err) {
+    if (err.message.includes('Failed to fetch')) {
+      appendMessage('Error: Unable to reach server.', false);
+    } else {appendMessage('Error: ' + (err.message || err), false);}
+  } finally {
+    pendingRequest = false;
+    sendBtn.disabled = false;
+    chatInput.disabled = false;
+    showTyping(false);
+  }
+}
+
+  sendBtn.addEventListener('click', sendMessage);
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  attachBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    appendMessage('Attached: ' + f.name, true);
+    ipcRenderer.send('log', 'chat-attach: ' + f.name);
+    // reset so same file can be attached again
+    fileInput.value = '';
+  });
+
+  // Close button collapses the expanded bubble
+  const closeBtn = document.getElementById('closeBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!expanded) return;
+      expanded = false;
+      // Start a short DOM mutation capture to help debug flashing nodes
+      captureDomMutations(900);
+
+      // First hide interactive controls so they fade out cleanly
+      container.classList.remove('show-close');
+      // Hide the main icon immediately to avoid it flashing during collapse
+      try { const ic = document.getElementById('icon'); if (ic) ic.style.visibility = 'hidden'; } catch (e) {}
+      // Log currently visible interactive elements to help identify flashers
+      logVisibleInteractives();
+      // Blur any focused inputs to avoid focus ring/keyboard artifacts
+      try { if (chatInput) chatInput.blur(); } catch (e) {}
+      try { if (fileInput) fileInput.blur(); } catch (e) {}
+      // Remove typing indicator if present
+      try { showTyping(false); } catch (e) {}
+      ipcRenderer.send('log', 'Bubble closed (start collapse)');
+      // Wait for the hide transition to finish, then collapse size
+      setTimeout(() => {
+        container.classList.remove('expanded');
+        ipcRenderer.send('log', 'Bubble collapsed');
+        ipcRenderer.send('resize-bubble', false);
+        // restore icon visibility after collapse finished (small grace)
+        try { const ic = document.getElementById('icon'); if (ic) setTimeout(() => { ic.style.visibility = ''; }, 120); } catch (e) {}
+      }, 180);
+    });
+  }
+
+  // Debug helper: capture DOM mutations for a short period and log them
+  function captureDomMutations(ms = 600) {
+    try {
+      const obs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.addedNodes && m.addedNodes.length) {
+            for (const n of m.addedNodes) {
+              try {
+                console.log('[DOM-CAPTURE] added:', n.nodeName, n.nodeType, n.className || n.id || '', n.outerHTML ? (n.outerHTML.slice(0,200)) : '');
+              } catch (e) { console.log('[DOM-CAPTURE] added node', n); }
+            }
+          }
+          if (m.removedNodes && m.removedNodes.length) {
+            for (const n of m.removedNodes) {
+              try { console.log('[DOM-CAPTURE] removed:', n.nodeName, n.className || n.id || ''); } catch (e) {}
+            }
+          }
+          if (m.type === 'attributes') {
+            try { console.log('[DOM-CAPTURE] attr:', m.target.nodeName, m.attributeName, m.target.className); } catch (e) {}
+          }
+        }
+      });
+      obs.observe(document.documentElement || document.body, { childList: true, subtree: true, attributes: true });
+      console.log('[DOM-CAPTURE] started for', ms, 'ms');
+      setTimeout(() => { obs.disconnect(); console.log('[DOM-CAPTURE] stopped'); }, ms);
+    } catch (e) {
+      console.error('captureDomMutations failed', e);
+    }
+  }
+
+  // Inspect the page for visible interactive elements and log them
+  function logVisibleInteractives() {
+    try {
+      const candidates = Array.from(document.querySelectorAll('button, textarea, input, .msg, #icon img'));
+      for (const el of candidates) {
+        const r = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        const visible = style.visibility !== 'hidden' && style.display !== 'none' && parseFloat(style.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+        if (visible) {
+          console.log('[VISIBLE-CAPTURE]', el.tagName, el.id || el.className || '', 'text=', (el.textContent||'').trim().slice(0,40));
+        }
+      }
+    } catch (e) { console.warn('logVisibleInteractives failed', e); }
+  }
+
+  // Ensure any <img> inside #icon is not draggable/selectable
+  (function() {
+    const icon = document.getElementById('icon');
+    if (!icon) return;
+    const imgs = icon.getElementsByTagName('img');
+    for (const img of imgs) {
+      try { img.draggable = false; } catch (e) {}
+      img.addEventListener('dragstart', (ev) => ev.preventDefault());
+    }
+  })();
+</script>
+</body>
+</html>

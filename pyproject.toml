@@ -1,0 +1,11 @@
+[project]
+name = "floating-bubble"
+version = "0.1.0"
+description = "Simple chat interface stored in a floating bubble that connects to LLM"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.128.0",
+    "ollama>=0.6.1",
+    "pydantic>=2.12.5",
+]
